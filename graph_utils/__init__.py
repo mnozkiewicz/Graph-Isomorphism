@@ -1,0 +1,1 @@
+from .reading import read_graph6_batches

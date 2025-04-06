@@ -8,3 +8,12 @@ wheels/
 
 # Virtual environments
 .venv
+
+# datasets
+raw_datasets/*
+processed_datasets/*
+!*.gitkeep
+
+# VSCode
+.DS_Store
+.vscode
