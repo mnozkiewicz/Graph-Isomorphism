@@ -16,5 +16,11 @@ def local_degree_profile(graph: nk.Graph, normalize: bool = True) -> list[np.nda
 
     std_dn = (dn**2).sum(axis=1) / degrees - mean_dn**2
 
-    ldp = [degrees / degrees.shape[0], min_dn, max_dn, mean_dn, std_dn]
+    ldp = [
+        np.array(degrees / degrees.shape[0], np.float16), 
+        np.array(min_dn, np.float16), 
+        np.array(max_dn, np.float16),
+        np.array(mean_dn, np.float16),
+        np.array(std_dn, np.float16)
+    ]
     return ldp

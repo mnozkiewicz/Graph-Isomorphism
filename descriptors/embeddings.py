@@ -1,4 +1,5 @@
-from typing import Callable
+from tkinter import NO
+from typing import Callable, Optional
 from functools import partial
 import numpy as np
 import networkit as nk
@@ -25,6 +26,7 @@ def get_function(name: str, normalize: bool) -> Callable[[nk.Graph], np.ndarray 
 def create_embedding_function(
         features: list[str],
         bins_per_feature: int,
+        histogram_range: Optional[tuple[int, int]] = None,
         include_node_features: bool = True,
         normalize: bool = True
     ) -> Callable[[nk.Graph], np.ndarray]:
@@ -46,12 +48,12 @@ def create_embedding_function(
         graph.indexEdges()
 
         edge_features = map(lambda f: f(graph), feature_functions)
-        edge_histograms = [np.histogram(edge_feature, bins=bins_per_feature)[0] for edge_feature in edge_features]
+        edge_histograms = [np.histogram(edge_feature, bins=bins_per_feature, range=histogram_range)[0] for edge_feature in edge_features]
         embedding = np.concatenate(edge_histograms)
 
         if include_node_features:
             ldp = local_degree_profile(graph)
-            node_histograms = [np.histogram(feature, bins=bins_per_feature)[0] for feature in ldp]
+            node_histograms = [np.histogram(feature, bins=bins_per_feature, range=histogram_range)[0] for feature in ldp]
             node_embedding = np.concatenate(node_histograms)
             embedding = np.concatenate((embedding, node_embedding))
 
