@@ -23,14 +23,7 @@ def get_function(name: str, normalize: bool) -> Callable[[nk.Graph], np.ndarray 
             raise ValueError(f"Unknown function name: {name}")
 
 
-def create_embedding_function(
-        features: list[str],
-        bins_per_feature: int,
-        histogram_range: Optional[tuple[int, int]] = None,
-        include_node_features: bool = True,
-        normalize: bool = True
-    ) -> Callable[[nk.Graph], np.ndarray]:
-
+def normalize_features(features):
     distinct_features = []
     for feature in features:
         if feature == "moltop":
@@ -39,10 +32,19 @@ def create_embedding_function(
             distinct_features.extend(["jaccard_index", "edge_betweenness", "lds"])
         else:
             distinct_features.append(feature)
+    return sorted(set(distinct_features))
 
-    distinct_features = sorted(set(distinct_features))
+def create_embedding_function(
+        features: list[str],
+        bins_per_feature: int,
+        histogram_range: Optional[tuple[int, int]] = None,
+        include_node_features: bool = True,
+        normalize: bool = True
+    ) -> Callable[[nk.Graph], np.ndarray]:
+
+    distinct_features = normalize_features(features)
     feature_functions = list(map(lambda x: get_function(x, normalize=normalize), distinct_features))
-
+    
 
     def combined_features(graph: nk.Graph) -> np.ndarray:
         graph.indexEdges()

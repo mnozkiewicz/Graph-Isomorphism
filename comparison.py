@@ -6,6 +6,7 @@ import random
 import os
 from typing import Dict, List, Any, Tuple
 import json
+import pandas as pd
 
 from graph_utils.reading import read_graph6
 
@@ -55,36 +56,38 @@ def single_test_collisions(number_of_nodes, features, **function_kwargs) -> Dict
     
     return select_problematic_ids(graph_reader, embedding_function)
 
+def _values_equal(a, b):
+    if isinstance(a, (np.ndarray, list)) and isinstance(b, (np.ndarray, list)):
+        return np.array_equal(a, b)
+    return a == b
 
-def tests(arguments_lists: List[Dict[str: Any]]):
-    file_path = os.path.join(SAVING_PATH, 'table')
+def _row_matches(row, criteria):
+    # for k, v in criteria.items():
+    #     print(k, v, row[k], v.__class__.__name__,  row[k].__class__.__name__)
+    # print(list(_values_equal(row[k], v) for k, v in criteria.items()))
+    return all(_values_equal(row[k], v) for k, v in criteria.items())
+
+def tests(arguments_lists: List[Dict[str, Any]]):
+    file_path = os.path.join(SAVING_PATH, 'table.parquet')
     if os.path.exists(file_path):
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        outputs_df = pd.read_parquet(file_path)
     else:
-        data = {}
+        outputs_df = pd.DataFrame(columns=ORDER + ['result'])
 
     for kwargs in arguments_lists:
-        current_dict = data
 
-        for i, key in enumerate(ORDER[:-1]):
-            if kwargs[key] in current_dict:
-                current_dict = current_dict[kwargs[key]]
-            else:
-                for added_key in ORDER[i:-1]:
-                    current_dict[kwargs[added_key]] = {}
-                    current_dict = current_dict[kwargs[added_key]]
-        else:
-            if kwargs[ORDER[-1]] in current_dict:
-                continue
+        exists = outputs_df.apply(lambda row: _row_matches(row, kwargs), axis=1).any()
+        if exists:
+            print(f'test with {kwargs} parameters existed, skipped')
+            continue
+        result = single_test_collisions(**kwargs)
+        result = [item for sublist in result.values() for item in sublist] if result else np.array([-1])
+        print(result)
+
+        outputs_df = pd.concat([outputs_df, pd.DataFrame([dict(**kwargs, result=result)])])
 
 
-        current_dict[kwargs[ORDER[-1]]] = single_test_collisions(**kwargs)
-
-
-
-    with open(file_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    outputs_df.to_parquet(file_path)
 
     
 
