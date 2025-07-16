@@ -44,6 +44,8 @@ def create_embedding_function(
     ) -> Callable[[nk.Graph], np.ndarray]:
 
     distinct_features = normalize_features(features)
+    print(features, distinct_features, include_node_features)
+
     feature_functions = list(map(lambda x: get_function(x, normalize=normalize), distinct_features))
 
     def combined_features(graph: nk.Graph) -> np.ndarray:
@@ -60,7 +62,7 @@ def create_embedding_function(
             ldp = local_degree_profile(graph)
 
             if embeddings: # if we want to have one single vector
-                node_histograms = [np.histogram(feature, bins=bins_per_feature, range=hrange)[0] for feature, hrange in zip(ldp, histogram_ranges[edge_features_count:])]
+                node_histograms = [np.histogram(feature, bins=bins_per_feature)[0] for feature in ldp]
                 node_embedding = np.concatenate(node_histograms)
                 embedding = np.concatenate((embedding, node_embedding))
                 return embedding

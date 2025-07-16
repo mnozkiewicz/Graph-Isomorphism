@@ -36,6 +36,7 @@ def open_test_enviroment(func):
 
 @open_test_enviroment
 def select_problematic_ids(graph_reader, embedding_function) -> Dict[str, list[int]]:
+    '''goes through all the graphs and selects only the ones that have collisions on embedding'''
     
     collisions: dict[str, list[int]] = {}
     hashes: dict[str, int] = {}
@@ -59,7 +60,7 @@ def select_problematic_ids(graph_reader, embedding_function) -> Dict[str, list[i
 
 @open_test_enviroment
 def find_optimal_histogram_ranges(graph_reader, embedding_function: Callable) ->List[Tuple[int, int]]:
-
+    '''function that goes through all descriptor values per graphs and finds minimum and maximum of each feature value'''
     first_graph = next(graph_reader)
     function_values: np.ndarray= embedding_function(first_graph)
     hist_ranges = [(min(histogram), max(histogram)) for histogram in function_values]
@@ -73,6 +74,23 @@ def find_optimal_histogram_ranges(graph_reader, embedding_function: Callable) ->
     
     return hist_ranges
 
+def reduce_number_of_features(stored_ranges_dict, number_of_nodes, features, normalize, **other_features):
+    if number_of_nodes not in stored_ranges_dict:
+        stored_ranges_dict[number_of_nodes] = {normalize: {}}
+        return features
+    
+    if normalize not in stored_ranges_dict[number_of_nodes]:
+        stored_ranges_dict[number_of_nodes][normalize] = {}
+        return features
+    
+    features_to_be_used = [feature for feature in features if feature not in stored_ranges_dict[number_of_nodes][normalize]]
+    return features_to_be_used
+    
+def update_histogram_ranges(stored_ranges_dict, features_to_update, histogram_ranges, features, number_of_nodes, normalize, **other_features) -> List[Tuple[int, int]]:
+    for feature, ranges in zip(features_to_update, histogram_ranges):
+        stored_ranges_dict[number_of_nodes][normalize][feature] = tuple(map(float, ranges))
+
+    return [stored_ranges_dict[number_of_nodes][normalize][feature] for feature in features]
 
 
 def _values_equal(a, b):
@@ -81,40 +99,54 @@ def _values_equal(a, b):
     return a == b
 
 def _row_matches(row, criteria):
-    # for k, v in criteria.items():
-    #     print(k, v, row[k], v.__class__.__name__,  row[k].__class__.__name__)
-    # print(list(_values_equal(row[k], v) for k, v in criteria.items()))
     return all(_values_equal(row[k], v) for k, v in criteria.items())
 
 def tests(arguments_lists: List[Dict[str, Any]]):
 
     # reading outputs file, having parameters values and list of all 
-    file_path = os.path.join(SAVING_PATH, 'table.parquet')
-    if os.path.exists(file_path):
-        outputs_df = pd.read_parquet(file_path)
+    output_path = os.path.join(SAVING_PATH, 'table.parquet')
+    if os.path.exists(output_path):
+        outputs_df = pd.read_parquet(output_path)
     else:
         outputs_df = pd.DataFrame(columns=ORDER + ['result'])
 
+    histograms_path = os.path.join(SAVING_PATH, 'histograms_ranges.json')
+    if os.path.exists(histograms_path):
+        with open(histograms_path, 'r') as f:
+            read_data = json.load(f)
+
+        stored_histogram_ranges = {int(key) : value for key, value in read_data.items()}
+        for size_dict in stored_histogram_ranges.values():
+            for k, v in list(size_dict.items()):
+                size_dict[bool(k)] = v
+                del size_dict[k]
+    else:
+        stored_histogram_ranges = {}
+
+
     try:
         for kwargs in arguments_lists:
-
+            kwargs['features'] = normalize_features(kwargs['features'])
             # check if this set of parameters already was run
             exists = outputs_df.apply(lambda row: _row_matches(row, {key : kwargs[key] for key in ORDER}), axis=1).any()
             if exists:
-                print(f'test with {kwargs} parameters existed, skipped')
+                print(f'test with { {key : kwargs[key] for key in ORDER} } parameters existed, skipped')
                 continue
             
-            # TODO check if this histogram ranges was calculated before
-            kwargs['embeddings'] = False
-            histogram_ranges = find_optimal_histogram_ranges(**kwargs)
-            print(histogram_ranges)
+            # reusing already calculated histogram ranges
+            features_to_be_used = reduce_number_of_features(stored_histogram_ranges, **kwargs)
 
-            kwargs['embeddings'] = True
-            kwargs['histogram_ranges'] = histogram_ranges
+            kwargs2 = kwargs.copy()
+            kwargs2['features'] = features_to_be_used
+            histogram_ranges = find_optimal_histogram_ranges(**kwargs2, embeddings=False)
+            
+            histogram_ranges = update_histogram_ranges(stored_histogram_ranges, features_to_be_used, histogram_ranges, **kwargs)
 
-            result = select_problematic_ids(**kwargs)
+            result = select_problematic_ids(**kwargs, embeddings=True, histogram_ranges=histogram_ranges)
             result = [item for sublist in result.values() for item in sublist] if result else np.array([-1])
             print(result)
+            print(stored_histogram_ranges)
+            print()
 
             outputs_df = pd.concat([outputs_df, pd.DataFrame([dict(**{key : kwargs[key] for key in ORDER}, result=result)])]) 
     
@@ -122,7 +154,9 @@ def tests(arguments_lists: List[Dict[str, Any]]):
         pass
 
     finally:
-        outputs_df.to_parquet(file_path)
+        outputs_df.to_parquet(output_path)
+        with open(histograms_path, 'w') as f:
+            json.dump(stored_histogram_ranges, f, indent=4)
 
     
 
