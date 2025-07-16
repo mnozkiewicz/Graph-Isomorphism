@@ -1,5 +1,5 @@
 from tkinter import NO
-from typing import Callable, Optional
+from typing import Callable, Optional, List, Tuple
 from functools import partial
 import numpy as np
 import networkit as nk
@@ -37,28 +37,36 @@ def normalize_features(features):
 def create_embedding_function(
         features: list[str],
         bins_per_feature: int,
-        histogram_range: Optional[tuple[int, int]] = None,
         include_node_features: bool = True,
-        normalize: bool = True
+        histogram_ranges: Optional[List[Tuple[int, int]]] = None,
+        normalize: bool = True,
+        embeddings: bool =True # if set to False, function returns raw values of function
     ) -> Callable[[nk.Graph], np.ndarray]:
 
     distinct_features = normalize_features(features)
     feature_functions = list(map(lambda x: get_function(x, normalize=normalize), distinct_features))
-    
 
     def combined_features(graph: nk.Graph) -> np.ndarray:
         graph.indexEdges()
 
-        edge_features = map(lambda f: f(graph), feature_functions)
-        edge_histograms = [np.histogram(edge_feature, bins=bins_per_feature, range=histogram_range)[0] for edge_feature in edge_features]
-        embedding = np.concatenate(edge_histograms)
+        edge_features = list(map(lambda f: f(graph), feature_functions))
+
+        edge_features_count = len(edge_features)
+        if embeddings:
+            edge_histograms = [np.histogram(edge_feature, bins=bins_per_feature, range=hrange)[0] for edge_feature, hrange in zip(edge_features, histogram_ranges[:edge_features_count])]
+            embedding = np.concatenate(edge_histograms)
 
         if include_node_features:
             ldp = local_degree_profile(graph)
-            node_histograms = [np.histogram(feature, bins=bins_per_feature, range=histogram_range)[0] for feature in ldp]
-            node_embedding = np.concatenate(node_histograms)
-            embedding = np.concatenate((embedding, node_embedding))
 
-        return embedding
+            if embeddings: # if we want to have one single vector
+                node_histograms = [np.histogram(feature, bins=bins_per_feature, range=hrange)[0] for feature, hrange in zip(ldp, histogram_ranges[edge_features_count:])]
+                node_embedding = np.concatenate(node_histograms)
+                embedding = np.concatenate((embedding, node_embedding))
+                return embedding
+            
+            edge_features.extend(ldp)
 
+        return embedding if embeddings else edge_features
+    
     return combined_features
