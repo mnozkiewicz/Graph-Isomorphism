@@ -17,7 +17,7 @@ READ_PATH = 'raw_datasets'
 SAVING_PATH = 'processed_datasets'
 
 
-ORDER = ['number_of_nodes', 'features', 'include_node_features', 'normalize']
+ORDER = ['number_of_nodes', 'features', 'normalize']
 
 def open_test_enviroment(func):
     '''Decorator for doing basic reading from the file + preparing embedding function. The `func` parameter must take graph_reader and `embedding_function`'''
@@ -101,6 +101,13 @@ def _values_equal(a, b):
 def _row_matches(row, criteria):
     return all(_values_equal(row[k], v) for k, v in criteria.items())
 
+def convert_bool_from_str(str: str):
+    if str in ['true', 'True']:
+        return True
+    elif str in ['false', 'False']:
+        return False
+    raise ValueError
+
 def tests(arguments_lists: List[Dict[str, Any]]):
 
     # reading outputs file, having parameters values and list of all 
@@ -118,18 +125,18 @@ def tests(arguments_lists: List[Dict[str, Any]]):
         stored_histogram_ranges = {int(key) : value for key, value in read_data.items()}
         for size_dict in stored_histogram_ranges.values():
             for k, v in list(size_dict.items()):
-                size_dict[bool(k)] = v
+                size_dict[convert_bool_from_str(k)] = v
                 del size_dict[k]
     else:
         stored_histogram_ranges = {}
 
-
     try:
-        for kwargs in arguments_lists:
+        for kwargs_original in arguments_lists:
+            kwargs = kwargs_original.copy()
             kwargs['features'] = normalize_features(kwargs['features'])
             # check if this set of parameters already was run
-            exists = outputs_df.apply(lambda row: _row_matches(row, {key : kwargs[key] for key in ORDER}), axis=1).any()
-            if exists:
+            exists = outputs_df.apply(lambda row: _row_matches(row, {key : kwargs_original[key] for key in ORDER}), axis=1).any()
+            if len(outputs_df) > 0 and exists:
                 print(f'test with { {key : kwargs[key] for key in ORDER} } parameters existed, skipped')
                 continue
             
@@ -145,10 +152,9 @@ def tests(arguments_lists: List[Dict[str, Any]]):
             result = select_problematic_ids(**kwargs, embeddings=True, histogram_ranges=histogram_ranges)
             result = [item for sublist in result.values() for item in sublist] if result else np.array([-1])
             print(result)
-            print(stored_histogram_ranges)
             print()
 
-            outputs_df = pd.concat([outputs_df, pd.DataFrame([dict(**{key : kwargs[key] for key in ORDER}, result=result)])]) 
+            outputs_df = pd.concat([outputs_df, pd.DataFrame([dict(**{key : kwargs_original[key] for key in ORDER}, result=result)])]) 
     
     except KeyboardInterrupt:
         pass
