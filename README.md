@@ -11,3 +11,13 @@ source .venv/bin/activate
 python main.py
 ```
 
+### Precommit 
+
+In order to use pre-commit hooks run
+
+```
+pre-commit install
+```
+
+In order to checkt 
+
