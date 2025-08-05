@@ -3,7 +3,7 @@ import networkit as nk
 from typing import Union
 
 
-def plot_graph(graph: Union[nx.Graph, nk.Graph], assume_connected: bool = False) -> None:
+def plot_graph(graph: Union[nx.Graph, nk.Graph]) -> None:
     if isinstance(graph, nk.Graph):
         graph = nk.nxadapter.nk2nx(graph)
 
