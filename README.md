@@ -13,11 +13,13 @@ python main.py
 
 ### Precommit 
 
-In order to use pre-commit hooks run
-
+To enable automatic pre-commit hooks on every commit, run:
 ```
 pre-commit install
 ```
 
-In order to checkt 
+To manually run all configured hooks on (without making a commit), use:
+```
+pre-commit run --all-files
+```
 
