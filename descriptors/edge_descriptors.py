@@ -1,9 +1,16 @@
-import numpy as np
 import networkit as nk
-import networkx as nx
-from networkit.linkprediction import AdjustedRandIndex, JaccardIndex, CommonNeighborsIndex
-from networkit.sparsification import TriangleEdgeScore, SCANStructuralSimilarityScore, LocalDegreeScore
+import numpy as np
 from networkit.centrality import Betweenness
+from networkit.linkprediction import (
+    AdjustedRandIndex,
+    CommonNeighborsIndex,
+    JaccardIndex,
+)
+from networkit.sparsification import (
+    LocalDegreeScore,
+    SCANStructuralSimilarityScore,
+    TriangleEdgeScore,
+)
 
 
 def jaccard_index(graph: nk.Graph, normalize: bool = True) -> np.ndarray:
