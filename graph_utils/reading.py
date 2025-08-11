@@ -10,7 +10,6 @@ READ_PATH = "raw_datasets"
 METADATA_FILE = "metadata.json"
 
 
-
 def read_graph6(
     name: str, output_format: str = "networkit"
 ) -> Generator[nk.Graph, None, None]:
@@ -28,17 +27,19 @@ def read_graph6(
             graph = output_mapper(graph)
             yield graph
 
+
 def evaluate_matedata(name: str) -> Dict[str, Any]:
-    
+
     graph_reader = read_graph6(name)
     node_count: np.ndarray = np.array([graph.numberOfNodes() for graph in graph_reader])
-    return {"number_of_nodes" : int(np.median(node_count))}
+    return {"number_of_nodes": int(np.median(node_count))}
+
 
 def read_dataset_properties(name) -> Dict[str, Any]:
 
     metadata_path = os.path.join(READ_PATH, METADATA_FILE)
     if os.path.exists(metadata_path):
-        with open(metadata_path, 'r') as f:
+        with open(metadata_path, "r") as f:
             metadata = json.load(f)
     else:
         metadata = {}
@@ -46,18 +47,9 @@ def read_dataset_properties(name) -> Dict[str, Any]:
     if name in metadata:
         return metadata[name]
 
-    path = os.path.join(READ_PATH, name)
-
     metadata[name] = evaluate_matedata(name)
 
-    with open(metadata_path, 'w') as f:
+    with open(metadata_path, "w") as f:
         json.dump(metadata, f, indent=4)
 
     return metadata[name]
-    
-
-
-
-    
-
-

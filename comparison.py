@@ -8,7 +8,7 @@ import pandas as pd
 import xxhash
 
 from descriptors.embeddings import create_embedding_function, normalize_features
-from graph_utils.reading import read_graph6, READ_PATH, read_dataset_properties
+from graph_utils.reading import read_graph6, read_dataset_properties
 
 SAVING_PATH = "processed_datasets"
 
@@ -21,13 +21,15 @@ def open_test_enviroment(func):
 
     @functools.wraps(func)
     def wrapper(dataset_name, features, **function_kwargs):
-        
+
         metadata = read_dataset_properties(dataset_name)
-        
+
         graph_reader = read_graph6(dataset_name)
 
         embedding_function = create_embedding_function(
-            features, bins_per_feature=metadata['number_of_nodes']**2, **function_kwargs
+            features,
+            bins_per_feature=metadata["number_of_nodes"] ** 2,
+            **function_kwargs,
         )
         return func(graph_reader, embedding_function)
 
@@ -109,9 +111,7 @@ def update_histogram_ranges(
     **other_features,
 ) -> List[Tuple[int, int]]:
     for feature, ranges in zip(features_to_update, histogram_ranges):
-        stored_ranges_dict[dataset_name][normalize][feature] = tuple(
-            map(float, ranges)
-        )
+        stored_ranges_dict[dataset_name][normalize][feature] = tuple(map(float, ranges))
 
     return [
         stored_ranges_dict[dataset_name][normalize][feature] for feature in features
@@ -164,9 +164,7 @@ def tests(arguments_lists: List[Dict[str, Any]]):
             kwargs["features"] = normalize_features(kwargs["features"])
             # check if this set of parameters already was run
             exists = outputs_df.apply(
-                lambda row: _row_matches(
-                    row, {key: kwargs[key] for key in ORDER}
-                ),
+                lambda row: _row_matches(row, {key: kwargs[key] for key in ORDER}),
                 axis=1,
             ).any()
             if len(outputs_df) > 0 and exists:
