@@ -150,7 +150,7 @@ def tests(arguments_lists: List[Dict[str, Any]]):
         with open(histograms_path, "r") as f:
             read_data = json.load(f)
 
-        stored_histogram_ranges = {int(key): value for key, value in read_data.items()}
+        stored_histogram_ranges = {key: value for key, value in read_data.items()}
         for size_dict in stored_histogram_ranges.values():
             for k, v in list(size_dict.items()):
                 size_dict[convert_bool_from_str(k)] = v
@@ -203,6 +203,7 @@ def tests(arguments_lists: List[Dict[str, Any]]):
                             dict(
                                 **{key: kwargs_original[key] for key in ORDER},
                                 result=result,
+                                dataset_name=kwargs["dataset_name"],
                             )
                         ]
                     ),
