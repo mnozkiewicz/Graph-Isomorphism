@@ -121,14 +121,6 @@ def _row_matches(row, criteria):
     return all(_values_equal(row[k], v) for k, v in criteria.items())
 
 
-# def convert_bool_from_str(str: str):
-#     if str in ["true", "True"]:
-#         return True
-#     elif str in ["false", "False"]:
-#         return False
-#     raise ValueError
-
-
 def tests(arguments_lists: List[Dict[str, Any]]):
 
     # reading outputs file, having parameters values and list of all
@@ -144,10 +136,6 @@ def tests(arguments_lists: List[Dict[str, Any]]):
             read_data = json.load(f)
 
         stored_histogram_ranges = {key: value for key, value in read_data.items()}
-        # for size_dict in stored_histogram_ranges.values():
-        #     for k, v in list(size_dict.items()):
-        #         size_dict[convert_bool_from_str(k)] = v
-        #         del size_dict[k]
     else:
         stored_histogram_ranges = {}
 
