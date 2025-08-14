@@ -13,7 +13,7 @@ from graph_utils.reading import read_graph6, read_dataset_properties
 SAVING_PATH = "processed_datasets"
 
 
-ORDER = ["features", "normalize"]
+ORDER = ["features", "dataset_name"]
 
 
 def open_test_enviroment(func):
@@ -83,20 +83,16 @@ def find_optimal_histogram_ranges(
 
 
 def reduce_number_of_features(
-    stored_ranges_dict, dataset_name, features, normalize, **other_features
+    stored_ranges_dict, dataset_name, features, **other_features
 ):
     if dataset_name not in stored_ranges_dict:
-        stored_ranges_dict[dataset_name] = {normalize: {}}
-        return features
-
-    if normalize not in stored_ranges_dict[dataset_name]:
-        stored_ranges_dict[dataset_name][normalize] = {}
+        stored_ranges_dict[dataset_name] = {}
         return features
 
     features_to_be_used = [
         feature
         for feature in features
-        if feature not in stored_ranges_dict[dataset_name][normalize]
+        if feature not in stored_ranges_dict[dataset_name]
     ]
     return features_to_be_used
 
@@ -107,15 +103,12 @@ def update_histogram_ranges(
     histogram_ranges,
     features,
     dataset_name,
-    normalize,
     **other_features,
 ) -> List[Tuple[int, int]]:
     for feature, ranges in zip(features_to_update, histogram_ranges):
-        stored_ranges_dict[dataset_name][normalize][feature] = tuple(map(float, ranges))
+        stored_ranges_dict[dataset_name][feature] = tuple(map(float, ranges))
 
-    return [
-        stored_ranges_dict[dataset_name][normalize][feature] for feature in features
-    ]
+    return [stored_ranges_dict[dataset_name][feature] for feature in features]
 
 
 def _values_equal(a, b):
@@ -128,12 +121,12 @@ def _row_matches(row, criteria):
     return all(_values_equal(row[k], v) for k, v in criteria.items())
 
 
-def convert_bool_from_str(str: str):
-    if str in ["true", "True"]:
-        return True
-    elif str in ["false", "False"]:
-        return False
-    raise ValueError
+# def convert_bool_from_str(str: str):
+#     if str in ["true", "True"]:
+#         return True
+#     elif str in ["false", "False"]:
+#         return False
+#     raise ValueError
 
 
 def tests(arguments_lists: List[Dict[str, Any]]):
@@ -151,16 +144,15 @@ def tests(arguments_lists: List[Dict[str, Any]]):
             read_data = json.load(f)
 
         stored_histogram_ranges = {key: value for key, value in read_data.items()}
-        for size_dict in stored_histogram_ranges.values():
-            for k, v in list(size_dict.items()):
-                size_dict[convert_bool_from_str(k)] = v
-                del size_dict[k]
+        # for size_dict in stored_histogram_ranges.values():
+        #     for k, v in list(size_dict.items()):
+        #         size_dict[convert_bool_from_str(k)] = v
+        #         del size_dict[k]
     else:
         stored_histogram_ranges = {}
 
     try:
-        for kwargs_original in arguments_lists:
-            kwargs = kwargs_original.copy()
+        for kwargs in arguments_lists:
             kwargs["features"] = normalize_features(kwargs["features"])
             # check if this set of parameters already was run
             exists = outputs_df.apply(
@@ -201,9 +193,8 @@ def tests(arguments_lists: List[Dict[str, Any]]):
                     pd.DataFrame(
                         [
                             dict(
-                                **{key: kwargs_original[key] for key in ORDER},
+                                **{key: kwargs[key] for key in ORDER},
                                 result=result,
-                                dataset_name=kwargs["dataset_name"],
                             )
                         ]
                     ),
