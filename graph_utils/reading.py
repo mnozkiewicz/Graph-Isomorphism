@@ -32,7 +32,8 @@ def evaluate_matedata(name: str) -> Dict[str, Any]:
 
     graph_reader = read_graph6(name)
     node_count: np.ndarray = np.array([graph.numberOfNodes() for graph in graph_reader])
-    return {"number_of_nodes": int(np.median(node_count))}
+    graph_count = node_count.shape[0]
+    return {"number_of_nodes": int(np.median(node_count)), "graph_count": graph_count}
 
 
 def read_dataset_properties(name) -> Dict[str, Any]:

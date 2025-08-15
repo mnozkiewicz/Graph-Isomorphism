@@ -1,6 +1,7 @@
 import functools
 import json
 import os
+from tqdm import tqdm
 from typing import Any, Callable, Dict, List, Tuple
 
 import numpy as np
@@ -31,21 +32,21 @@ def open_test_enviroment(func):
             bins_per_feature=metadata["number_of_nodes"] ** 2,
             **function_kwargs,
         )
-        return func(graph_reader, embedding_function)
+        return func(graph_reader, embedding_function, metadata)
 
     return wrapper
 
 
 @open_test_enviroment
-def select_problematic_ids(graph_reader, embedding_function) -> Dict[str, list[int]]:
+def select_problematic_ids(
+    graph_reader, embedding_function: Callable, metadata
+) -> Dict[str, list[int]]:
     """goes through all the graphs and selects only the ones that have collisions on embedding"""
 
     collisions: dict[str, list[int]] = {}
     hashes: dict[str, int] = {}
-
-    for graph_id, graph in enumerate(graph_reader):
-        if graph_id % 2000 == 0:
-            print(graph_id)
+    print("Selection of problematic IDs")
+    for graph_id, graph in tqdm(enumerate(graph_reader), total=metadata["graph_count"]):
 
         embedding = embedding_function(graph)
         h = xxhash.xxh128_hexdigest(embedding.tobytes())
@@ -63,7 +64,7 @@ def select_problematic_ids(graph_reader, embedding_function) -> Dict[str, list[i
 
 @open_test_enviroment
 def find_optimal_histogram_ranges(
-    graph_reader, embedding_function: Callable
+    graph_reader, embedding_function: Callable, metadata
 ) -> List[Tuple[float, float]]:
     """function that goes through all descriptor values per graphs and finds minimum and maximum of each feature value"""
     first_graph = next(graph_reader)
@@ -72,9 +73,7 @@ def find_optimal_histogram_ranges(
         (min(histogram), max(histogram)) for histogram in function_values
     ]
 
-    for graph_id, graph in enumerate(graph_reader, start=1):
-        if graph_id % 2000 == 0:
-            print(graph_id)
+    for graph in tqdm(graph_reader, total=metadata["graph_count"]):
         function_values = embedding_function(graph)
         hist_ranges = [
             (min(ranges[0], min(values)), max(ranges[1], max(values)))
