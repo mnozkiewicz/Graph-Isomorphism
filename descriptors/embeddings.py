@@ -1,45 +1,19 @@
-from functools import partial
 from typing import Callable, List, Optional, Tuple
 
 import networkit as nk
 import numpy as np
 
-from .edge_descriptors import (
-    calculate_adjusted_rand_index,
-    calculate_scan_structural_similarity_score,
-    edge_betweenness,
-    jaccard_index,
-    local_degree_score,
-)
-from .node_descriptors import degree_ldp, max_ldp, mean_ldp, min_ldp, std_ldp
+from .edge_descriptors import edge_descriptors_dict
+from .node_descriptors import node_descriptors_dict
 
 
-def get_function(
-    name: str, normalize: bool
-) -> Callable[[nk.Graph], np.ndarray | list[np.ndarray]]:
-    match name:
-        case "jaccard_index":
-            return partial(jaccard_index, normalize=normalize)
-        case "edge_betweenness":
-            return partial(edge_betweenness, normalize=normalize)
-        case "lds":
-            return local_degree_score
-        case "ari":
-            return calculate_adjusted_rand_index
-        case "scan":
-            return calculate_scan_structural_similarity_score
-        case "ldp_degree":
-            return degree_ldp
-        case "ldp_min":
-            return min_ldp
-        case "ldp_max":
-            return max_ldp
-        case "ldp_mean":
-            return mean_ldp
-        case "ldp_std":
-            return std_ldp
-        case _:
-            raise ValueError(f"Unknown function name: {name}")
+def get_function(name: str) -> Callable[[nk.Graph], np.ndarray | list[np.ndarray]]:
+    if name in edge_descriptors_dict:
+        return edge_descriptors_dict[name]
+    elif name in node_descriptors_dict:
+        return node_descriptors_dict[name]
+
+    raise ValueError(f"Unknown function name: {name}")
 
 
 def normalize_features(features):
@@ -47,8 +21,14 @@ def normalize_features(features):
     for feature in features:
         if feature == "moltop":
             distinct_features.extend(["ari", "scan", "edge_betweenness"])
+        elif feature == "moltop_normalized":
+            distinct_features.extend(["ari", "scan", "edge_betweenness_normalized"])
         elif feature == "ltp":
             distinct_features.extend(["jaccard_index", "edge_betweenness", "lds"])
+        elif feature == "ltp_normalized":
+            distinct_features.extend(
+                ["jaccard_index_normalized", "edge_betweenness_normalized", "lds"]
+            )
         elif feature == "ldp":
             distinct_features.extend(
                 ["ldp_degree", "ldp_min", "ldp_max", "ldp_mean", "ldp_std"]
@@ -62,16 +42,13 @@ def create_embedding_function(
     features: list[str],
     bins_per_feature: int,
     histogram_ranges: Optional[List[Tuple[int, int]]] = None,
-    normalize: bool = True,
     embeddings: bool = True,  # if set to False, function returns raw values of function
 ) -> Callable[[nk.Graph], np.ndarray | List[np.ndarray]]:
 
     distinct_features = normalize_features(features)
     print(features, distinct_features)
 
-    feature_functions = list(
-        map(lambda x: get_function(x, normalize=normalize), distinct_features)
-    )
+    feature_functions = list(map(lambda x: get_function(x), distinct_features))
 
     def combined_features(graph: nk.Graph) -> np.ndarray | List[np.ndarray]:
         graph.indexEdges()

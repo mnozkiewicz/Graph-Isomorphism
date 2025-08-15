@@ -1,27 +1,62 @@
+from functools import partial
+from typing import Type
+
 import networkit as nk
 import numpy as np
-from networkit.centrality import Betweenness
+from networkit.centrality import Betweenness, EigenvectorCentrality
+from networkit.linkprediction import LinkPredictor
 from networkit.linkprediction import (
     AdjustedRandIndex,
     CommonNeighborsIndex,
     JaccardIndex,
+    AdamicAdarIndex,
+    KatzIndex,
+    NeighborhoodDistanceIndex,
+    NeighborsMeasureIndex,
+    PreferentialAttachmentIndex,
+    ResourceAllocationIndex,
+    SameCommunityIndex,
+    TotalNeighborsIndex,
 )
 from networkit.sparsification import (
     LocalDegreeScore,
     SCANStructuralSimilarityScore,
     TriangleEdgeScore,
+    ChibaNishizekiQuadrangleEdgeScore,
+    ChibaNishizekiTriangleEdgeScore,
 )
 
+edge_descriptors_dict = {}
 
+
+def link_predictor_template(predictor: Type[LinkPredictor], graph: nk.Graph):
+    descriptor = predictor(graph)
+    result = descriptor.runAll()
+    return np.array([e[1] for e in result], np.float16)
+
+
+def add_to_dict(name, can_be_normalized=False):
+    def decorator(f):
+        if can_be_normalized:
+            edge_descriptors_dict[name] = partial(f, normalize=False)
+            edge_descriptors_dict[name + "_normalized"] = partial(f, normalize=True)
+        else:
+            edge_descriptors_dict[name] = f
+
+        return f
+
+    return decorator
+
+
+@add_to_dict("jaccard_index", can_be_normalized=True)
 def jaccard_index(graph: nk.Graph, normalize: bool = True) -> np.ndarray:
     if normalize:
-        jaccard_index = JaccardIndex(graph)
+        return link_predictor_template(JaccardIndex, graph)
     else:
-        jaccard_index = CommonNeighborsIndex(graph)
-    scores = [jaccard_index.run(*edge) for edge in graph.iterEdges()]
-    return np.array(scores, np.float16)
+        return link_predictor_template(CommonNeighborsIndex, graph)
 
 
+@add_to_dict("edge_betweenness", can_be_normalized=True)
 def edge_betweenness(graph: nk.Graph, normalize: bool = True) -> np.ndarray:
     betweeness = Betweenness(graph, normalized=normalize, computeEdgeCentrality=True)
     betweeness.run()
@@ -29,6 +64,7 @@ def edge_betweenness(graph: nk.Graph, normalize: bool = True) -> np.ndarray:
     return np.array(scores, np.float16)
 
 
+@add_to_dict("lds")
 def local_degree_score(graph: nk.Graph) -> np.ndarray:
     local_degree_score = LocalDegreeScore(graph)
     local_degree_score.run()
@@ -36,12 +72,12 @@ def local_degree_score(graph: nk.Graph) -> np.ndarray:
     return np.array(scores, np.float16)
 
 
+@add_to_dict("ari")
 def calculate_adjusted_rand_index(graph: nk.Graph) -> np.ndarray:
-    index = AdjustedRandIndex(graph)
-    scores = [index.run(u, v) for u, v in graph.iterEdges()]
-    return np.array(scores, np.float16)
+    return link_predictor_template(AdjustedRandIndex, graph)
 
 
+@add_to_dict("scan")
 def calculate_scan_structural_similarity_score(graph: nk.Graph) -> np.ndarray:
     triangles = TriangleEdgeScore(graph)
     triangles.run()
@@ -51,3 +87,64 @@ def calculate_scan_structural_similarity_score(graph: nk.Graph) -> np.ndarray:
     score.run()
     scores = score.scores()
     return np.array(scores, np.float16)
+
+
+@add_to_dict("adamic_adar")
+def calculate_adamic_adar_index(graph: nk.Graph) -> np.ndarray:
+    return link_predictor_template(AdamicAdarIndex, graph)
+
+
+@add_to_dict("katz_index")
+def calculate_katz_index(graph: nk.Graph) -> np.ndarray:
+    return link_predictor_template(KatzIndex, graph)
+
+
+@add_to_dict("neighborhood_distance")
+def calculate_neighborhood_distance_index(graph: nk.Graph) -> np.ndarray:
+    return link_predictor_template(NeighborhoodDistanceIndex, graph)
+
+
+@add_to_dict("neighborhood_measure")
+def calculate_neighborhood_measure_index(graph: nk.Graph) -> np.ndarray:
+    return link_predictor_template(NeighborsMeasureIndex, graph)
+
+
+@add_to_dict("preferential_attachment")
+def calculate_preferential_attachment_index(graph: nk.Graph) -> np.ndarray:
+    return link_predictor_template(PreferentialAttachmentIndex, graph)
+
+
+@add_to_dict("resource_allocation")
+def calculate_resource_allocation_index(graph: nk.Graph) -> np.ndarray:
+    return link_predictor_template(ResourceAllocationIndex, graph)
+
+
+@add_to_dict("same_community")
+def calculate_same_community_index(graph: nk.Graph) -> np.ndarray:
+    return link_predictor_template(SameCommunityIndex, graph)
+
+
+@add_to_dict("total_nieghbors")
+def calculate_total_nieghbors_index(graph: nk.Graph) -> np.ndarray:
+    return link_predictor_template(TotalNeighborsIndex, graph)
+
+
+@add_to_dict("eigenvector_centrality")
+def calculate_eigenvector_centrality(graph: nk.Graph) -> np.ndarray:
+    desc = EigenvectorCentrality(graph)
+    desc.run()
+    return np.array(desc.scores(), np.float16)
+
+
+@add_to_dict("cn_quadrangle")
+def calculate_CN_quadrangle_edge_score(graph: nk.Graph) -> np.ndarray:
+    desc = ChibaNishizekiQuadrangleEdgeScore(graph)
+    desc.run()
+    return np.array(desc.scores(), np.float16)
+
+
+@add_to_dict("cn_triangle")
+def calculate_CN_triangle_edge_score(graph: nk.Graph) -> np.ndarray:
+    desc = ChibaNishizekiTriangleEdgeScore(graph)
+    desc.run()
+    return np.array(desc.scores(), np.float16)
