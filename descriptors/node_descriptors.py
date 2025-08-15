@@ -1,16 +1,28 @@
-from functools import wraps
+from functools import wraps, partial
 
 import networkit as nk
 import networkx as nx
 import numpy as np
 
+from networkit.centrality import (
+    EigenvectorCentrality,
+    Closeness,
+    DegreeCentrality,
+    KatzCentrality,
+    LocalClusteringCoefficient,
+)
 
 node_descriptors_dict = {}
 
 
-def add_to_dict(name):
+def add_to_dict(name, can_be_normalized=False):
     def decorator(f):
-        node_descriptors_dict[name] = f
+        if can_be_normalized:
+            node_descriptors_dict[name] = partial(f, normalize=False)
+            node_descriptors_dict[name + "_normalized"] = partial(f, normalize=True)
+        else:
+            node_descriptors_dict[name] = f
+
         return f
 
     return decorator
@@ -68,29 +80,69 @@ def degree_ldp(graph: nk.Graph, normalize: bool = True) -> np.ndarray:
     return degrees / degrees.shape[0]
 
 
-@add_to_dict("ldp_min")
+@add_to_dict("ldp_min", can_be_normalized=True)
 @change_to_numpy
 def min_ldp(graph: nk.Graph, normalize: bool = True) -> np.ndarray:
     degree_matrix, _ = _calculate_degree_matrix(graph, normalize)
     return degree_matrix.min(axis=1, explicit=True).toarray()
 
 
-@add_to_dict("ldp_max")
+@add_to_dict("ldp_max", can_be_normalized=True)
 @change_to_numpy
 def max_ldp(graph: nk.Graph, normalize: bool = True) -> np.ndarray:
     degree_matrix, _ = _calculate_degree_matrix(graph, normalize)
     return degree_matrix.max(axis=1, explicit=True).toarray()
 
 
-@add_to_dict("ldp_mean")
+@add_to_dict("ldp_mean", can_be_normalized=True)
 @change_to_numpy
 def mean_ldp(graph: nk.Graph, normalize: bool = True) -> np.ndarray:
     degree_matrix, degrees = _calculate_degree_matrix(graph, normalize)
     return degree_matrix.sum(axis=1) / degrees
 
 
-@add_to_dict("ldp_std")
+@add_to_dict("ldp_std", can_be_normalized=True)
 def std_ldp(graph: nk.Graph, normalize: bool = True) -> np.ndarray:
     degree_matrix, degrees = _calculate_degree_matrix(graph, normalize)
     mean_degree = degree_matrix.sum(axis=1) / degrees
     return (degree_matrix**2).sum(axis=1) / degrees - mean_degree**2
+
+
+# =========== centrality
+
+
+@add_to_dict("eigenvector_centrality")
+def calculate_eigenvector_centrality(graph: nk.Graph) -> np.ndarray:
+    desc = EigenvectorCentrality(graph)
+    desc.run()
+    return np.array(desc.scores(), np.float16)
+
+
+@add_to_dict("closeness", can_be_normalized=True)
+def calculate_closeness(graph: nk.Graph, normalize: bool = True) -> np.ndarray:
+    desc = Closeness(
+        graph, normalize, nk.centrality.ClosenessVariant.GENERALIZED
+    )  # don't add argument names, it breaks __cinit__ for whatever reason
+    desc.run()
+    return np.array(desc.scores(), np.float16)
+
+
+@add_to_dict("degree_centrality", can_be_normalized=True)
+def calculate_degree_centrality(graph: nk.Graph, normalize: bool) -> np.ndarray:
+    desc = DegreeCentrality(graph, normalized=normalize)
+    desc.run()
+    return np.array(desc.scores(), np.float16)
+
+
+@add_to_dict("katz_centrality")
+def calculate_katz_centrality(graph: nk.Graph) -> np.ndarray:
+    desc = KatzCentrality(graph)
+    desc.run()
+    return np.array(desc.scores(), np.float16)
+
+
+@add_to_dict("lcc")
+def calculate_lcc(graph: nk.Graph) -> np.ndarray:
+    desc = LocalClusteringCoefficient(graph)
+    desc.run()
+    return np.array(desc.scores(), np.float16)

@@ -64,21 +64,27 @@ def select_problematic_ids(graph_reader, embedding_function) -> Dict[str, list[i
 @open_test_enviroment
 def find_optimal_histogram_ranges(
     graph_reader, embedding_function: Callable
-) -> List[Tuple[int, int]]:
+) -> List[Tuple[float, float]]:
     """function that goes through all descriptor values per graphs and finds minimum and maximum of each feature value"""
     first_graph = next(graph_reader)
     function_values: np.ndarray = embedding_function(first_graph)
-    hist_ranges = [(min(histogram), max(histogram)) for histogram in function_values]
+    hist_ranges: List[Tuple[float, float]] = [
+        (min(histogram), max(histogram)) for histogram in function_values
+    ]
 
     for graph_id, graph in enumerate(graph_reader, start=1):
         if graph_id % 2000 == 0:
             print(graph_id)
         function_values = embedding_function(graph)
         hist_ranges = [
-            (min(ranges[0], min(values)), max(ranges[1], min(values)))
+            (min(ranges[0], min(values)), max(ranges[1], max(values)))
             for ranges, values in zip(hist_ranges, function_values)
         ]
 
+    # in situation that range is too small and there is no way to fit all bins into
+    for i, range in enumerate(hist_ranges):
+        if range[1] - range[0] < 2e-4:
+            hist_ranges[i] = (range[0], range[0] + 2e-4)
     return hist_ranges
 
 
