@@ -45,7 +45,7 @@ def _calculate_degree_matrix(graph, normalize):
 def change_to_numpy(function):
     @wraps(function)
     def wrapper(*args, **kwargs):
-        return np.array(function(*args, **kwargs), dtype=np.float16)
+        return np.array(function(*args, **kwargs), dtype=np.float32)
 
     return wrapper
 
@@ -65,11 +65,11 @@ def local_degree_profile(graph: nk.Graph, normalize: bool = True) -> list[np.nda
     std_dn = (dn**2).sum(axis=1) / degrees - mean_dn**2
 
     ldp = [
-        np.array(degrees / degrees.shape[0], np.float16),
-        np.array(min_dn, np.float16),
-        np.array(max_dn, np.float16),
-        np.array(mean_dn, np.float16),
-        np.array(std_dn, np.float16),
+        np.array(degrees / degrees.shape[0], np.float32),
+        np.array(min_dn, np.float32),
+        np.array(max_dn, np.float32),
+        np.array(mean_dn, np.float32),
+        np.array(std_dn, np.float32),
     ]
     return ldp
 
@@ -115,7 +115,7 @@ def std_ldp(graph: nk.Graph, normalize: bool = True) -> np.ndarray:
 def calculate_eigenvector_centrality(graph: nk.Graph) -> np.ndarray:
     desc = EigenvectorCentrality(graph)
     desc.run()
-    return np.array(desc.scores(), np.float16)
+    return np.array(desc.scores(), np.float32)
 
 
 @add_to_dict("closeness", can_be_normalized=True)
@@ -124,25 +124,25 @@ def calculate_closeness(graph: nk.Graph, normalize: bool = True) -> np.ndarray:
         graph, normalize, nk.centrality.ClosenessVariant.GENERALIZED
     )  # don't add argument names, it breaks __cinit__ for whatever reason
     desc.run()
-    return np.array(desc.scores(), np.float16)
+    return np.array(desc.scores(), np.float32)
 
 
 @add_to_dict("degree_centrality", can_be_normalized=True)
 def calculate_degree_centrality(graph: nk.Graph, normalize: bool) -> np.ndarray:
     desc = DegreeCentrality(graph, normalized=normalize)
     desc.run()
-    return np.array(desc.scores(), np.float16)
+    return np.array(desc.scores(), np.float32)
 
 
 @add_to_dict("katz_centrality")
 def calculate_katz_centrality(graph: nk.Graph) -> np.ndarray:
     desc = KatzCentrality(graph)
     desc.run()
-    return np.array(desc.scores(), np.float16)
+    return np.array(desc.scores(), np.float32)
 
 
 @add_to_dict("lcc")
 def calculate_lcc(graph: nk.Graph) -> np.ndarray:
     desc = LocalClusteringCoefficient(graph)
     desc.run()
-    return np.array(desc.scores(), np.float16)
+    return np.array(desc.scores(), np.float32)

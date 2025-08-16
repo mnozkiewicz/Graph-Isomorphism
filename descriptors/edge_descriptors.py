@@ -36,7 +36,7 @@ edge_descriptors_dict = {}
 
 def link_predictor_template(predictor: Type[LinkPredictor], graph: nk.Graph, *args):
     descriptor = predictor(graph, *args)
-    return np.array([descriptor.run(*e) for e in graph.iterEdges()], np.float16)
+    return np.array([descriptor.run(*e) for e in graph.iterEdges()], np.float32)
 
 
 def add_to_dict(name, can_be_normalized=False):
@@ -109,7 +109,7 @@ def calculate_algebraic_distance_index(graph: nk.Graph) -> np.ndarray:
         graph, 20, 200  # numberSystems
     )  # numberIterations
     descriptor.preprocess()
-    return np.array([descriptor.run(*e) for e in graph.iterEdges()], np.float16)
+    return np.array([descriptor.run(*e) for e in graph.iterEdges()], np.float32)
 
 
 @add_to_dict("ari")
@@ -126,7 +126,7 @@ def local_degree_score(graph: nk.Graph) -> np.ndarray:
     local_degree_score = LocalDegreeScore(graph)
     local_degree_score.run()
     scores = local_degree_score.scores()
-    return np.array(scores, np.float16)
+    return np.array(scores, np.float32)
 
 
 @add_to_dict("scan")
@@ -138,21 +138,21 @@ def calculate_scan_structural_similarity_score(graph: nk.Graph) -> np.ndarray:
     score = SCANStructuralSimilarityScore(graph, triangles)
     score.run()
     scores = score.scores()
-    return np.array(scores, np.float16)
+    return np.array(scores, np.float32)
 
 
 @add_to_dict("cn_quadrangle")
 def calculate_CN_quadrangle_edge_score(graph: nk.Graph) -> np.ndarray:
     desc = ChibaNishizekiQuadrangleEdgeScore(graph)
     desc.run()
-    return np.array(desc.scores(), np.float16)
+    return np.array(desc.scores(), np.float32)
 
 
 @add_to_dict("cn_triangle")
 def calculate_CN_triangle_edge_score(graph: nk.Graph) -> np.ndarray:
     desc = ChibaNishizekiTriangleEdgeScore(graph)
     desc.run()
-    return np.array(desc.scores(), np.float16)
+    return np.array(desc.scores(), np.float32)
 
 
 @add_to_dict("lss")
@@ -164,14 +164,14 @@ def calculate_local_similarity_sparsification(graph: nk.Graph) -> np.ndarray:
     score = LocalSimilarityScore(graph, triangles)
     score.run()
     scores = score.scores()
-    return np.array(scores, np.float16)
+    return np.array(scores, np.float32)
 
 
 @add_to_dict("simmelian_sparsifier_np")  # Np - non parametric
 def calculate_simmelian_sparsifier(graph: nk.Graph) -> np.ndarray:
     score = SimmelianSparsifierNonParametric()
     scores = score.scores(graph)
-    return np.array(scores, np.float16)
+    return np.array(scores, np.float32)
 
 
 # =========== centrality
@@ -183,7 +183,7 @@ def calculate_edge_betweenness(graph: nk.Graph, normalize: bool = True) -> np.nd
     betweeness = Betweenness(graph, normalized=normalize, computeEdgeCentrality=True)
     betweeness.run()
     scores = betweeness.edgeScores()
-    return np.array(scores, np.float16)
+    return np.array(scores, np.float32)
 
 
 @add_to_dict("spanning_edge")
@@ -192,4 +192,4 @@ def calculate_spanning_edge_centrality(graph: nk.Graph) -> np.ndarray:
     betweeness = SpanningEdgeCentrality(graph)
     betweeness.run()
     scores = betweeness.scores()
-    return np.array(scores, np.float16)
+    return np.array(scores, np.float32)
