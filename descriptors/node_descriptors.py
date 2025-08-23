@@ -75,7 +75,7 @@ def local_degree_profile(graph: nk.Graph, normalize: bool = True) -> list[np.nda
 
 
 @add_to_dict("ldp_degree")
-def degree_ldp(graph: nk.Graph, normalize: bool = True) -> np.ndarray:
+def degree_ldp(graph: nk.Graph) -> np.ndarray:
     degrees, _ = _calculate_degress(graph)
     return degrees / degrees.shape[0]
 
