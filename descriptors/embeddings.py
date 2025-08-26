@@ -46,7 +46,6 @@ def create_embedding_function(
 ) -> Callable[[nk.Graph], np.ndarray | List[np.ndarray]]:
 
     distinct_features = normalize_features(features)
-    print(features, distinct_features)
 
     feature_functions = list(map(lambda x: get_function(x), distinct_features))
 

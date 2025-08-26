@@ -1,7 +1,9 @@
 import functools
 import json
 import os
+from tqdm.auto import tqdm
 from typing import Any, Callable, Dict, List, Tuple
+import time
 
 import numpy as np
 import pandas as pd
@@ -31,21 +33,22 @@ def open_test_enviroment(func):
             bins_per_feature=metadata["number_of_nodes"] ** 2,
             **function_kwargs,
         )
-        return func(graph_reader, embedding_function)
+        return func(graph_reader, embedding_function, metadata)
 
     return wrapper
 
 
 @open_test_enviroment
-def select_problematic_ids(graph_reader, embedding_function) -> Dict[str, list[int]]:
+def select_problematic_ids(
+    graph_reader, embedding_function: Callable, metadata
+) -> Dict[str, list[int]]:
     """goes through all the graphs and selects only the ones that have collisions on embedding"""
 
     collisions: dict[str, list[int]] = {}
     hashes: dict[str, int] = {}
-
-    for graph_id, graph in enumerate(graph_reader):
-        if graph_id % 2000 == 0:
-            print(graph_id)
+    for graph_id, graph in tqdm(
+        enumerate(graph_reader), total=metadata["graph_count"], leave=False
+    ):
 
         embedding = embedding_function(graph)
         h = xxhash.xxh128_hexdigest(embedding.tobytes())
@@ -57,28 +60,36 @@ def select_problematic_ids(graph_reader, embedding_function) -> Dict[str, list[i
                 collisions[h].append(graph_id)
             else:
                 collisions[h] = [hashes[h], graph_id]
-
     return collisions
 
 
 @open_test_enviroment
 def find_optimal_histogram_ranges(
-    graph_reader, embedding_function: Callable
-) -> List[Tuple[int, int]]:
+    graph_reader, embedding_function: Callable, metadata
+) -> List[Tuple[float, float]]:
     """function that goes through all descriptor values per graphs and finds minimum and maximum of each feature value"""
     first_graph = next(graph_reader)
     function_values: np.ndarray = embedding_function(first_graph)
-    hist_ranges = [(min(histogram), max(histogram)) for histogram in function_values]
-
-    for graph_id, graph in enumerate(graph_reader, start=1):
-        if graph_id % 2000 == 0:
-            print(graph_id)
+    hist_ranges: List[Tuple[float, float]] = [
+        (min(histogram), max(histogram)) for histogram in function_values
+    ]
+    i = 0
+    for graph in tqdm(
+        graph_reader,
+        total=metadata["graph_count"] - 1,
+        leave=False,
+        postfix="histogram_ranges",
+    ):
+        i += 1
         function_values = embedding_function(graph)
         hist_ranges = [
-            (min(ranges[0], min(values)), max(ranges[1], min(values)))
+            (min(ranges[0], min(values)), max(ranges[1], max(values)))
             for ranges, values in zip(hist_ranges, function_values)
         ]
-
+    # in situation that range is too small and there is no way to fit all bins into
+    for i, range in enumerate(hist_ranges):
+        if range[1] - range[0] < 2e-4:
+            hist_ranges[i] = (range[0], range[0] + 2e-4)
     return hist_ranges
 
 
@@ -140,54 +151,62 @@ def tests(arguments_lists: List[Dict[str, Any]]):
         stored_histogram_ranges = {}
 
     try:
-        for kwargs in arguments_lists:
-            kwargs["features"] = normalize_features(kwargs["features"])
-            # check if this set of parameters already was run
-            exists = outputs_df.apply(
-                lambda row: _row_matches(row, {key: kwargs[key] for key in ORDER}),
-                axis=1,
-            ).any()
-            if len(outputs_df) > 0 and exists:
-                print(
-                    f"test with { {key : kwargs[key] for key in ORDER} } parameters existed, skipped"
+        with tqdm(total=len(arguments_lists)) as progress_bar:
+            for kwargs in arguments_lists:
+                progress_bar.set_postfix(
+                    dataset=kwargs["dataset_name"], features=kwargs["features"]
                 )
-                continue
+                kwargs["features"] = normalize_features(kwargs["features"])
+                # check if this set of parameters already was run
+                exists = outputs_df.apply(
+                    lambda row: _row_matches(row, {key: kwargs[key] for key in ORDER}),
+                    axis=1,
+                ).any()
+                if len(outputs_df) > 0 and exists:
+                    progress_bar.update(1)
+                    progress_bar.set_postfix(
+                        INFO="This args was already tested", **kwargs
+                    )
+                    time.sleep(0.1)
+                    continue
 
-            # reusing already calculated histogram ranges
-            features_to_be_used = reduce_number_of_features(
-                stored_histogram_ranges, **kwargs
-            )
+                # reusing already calculated histogram ranges
+                features_to_be_used = reduce_number_of_features(
+                    stored_histogram_ranges, **kwargs
+                )
+                if len(features_to_be_used) > 0:
+                    kwargs2 = kwargs.copy()
+                    kwargs2["features"] = features_to_be_used
+                    histogram_ranges = find_optimal_histogram_ranges(**kwargs2, embeddings=False)  # type: ignore
 
-            kwargs2 = kwargs.copy()
-            kwargs2["features"] = features_to_be_used
-            histogram_ranges = find_optimal_histogram_ranges(**kwargs2, embeddings=False)  # type: ignore
+                    histogram_ranges = update_histogram_ranges(
+                        stored_histogram_ranges,
+                        features_to_be_used,
+                        histogram_ranges,
+                        **kwargs,
+                    )
 
-            histogram_ranges = update_histogram_ranges(
-                stored_histogram_ranges, features_to_be_used, histogram_ranges, **kwargs
-            )
+                result = select_problematic_ids(**kwargs, embeddings=True, histogram_ranges=histogram_ranges)  # type: ignore
+                result = (
+                    [item for sublist in result.values() for item in sublist]
+                    if result
+                    else np.array([-1])
+                )
 
-            result = select_problematic_ids(**kwargs, embeddings=True, histogram_ranges=histogram_ranges)  # type: ignore
-            result = (
-                [item for sublist in result.values() for item in sublist]
-                if result
-                else np.array([-1])
-            )
-            print(result)
-            print()
-
-            outputs_df = pd.concat(
-                [
-                    outputs_df,
-                    pd.DataFrame(
-                        [
-                            dict(
-                                **{key: kwargs[key] for key in ORDER},
-                                result=result,
-                            )
-                        ]
-                    ),
-                ]
-            )
+                outputs_df = pd.concat(
+                    [
+                        outputs_df,
+                        pd.DataFrame(
+                            [
+                                dict(
+                                    **{key: kwargs[key] for key in ORDER},
+                                    result=result,
+                                )
+                            ]
+                        ),
+                    ]
+                )
+                progress_bar.update(1)
 
     except KeyboardInterrupt:
         pass

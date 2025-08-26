@@ -32,23 +32,30 @@ def evaluate_matedata(name: str) -> Dict[str, Any]:
 
     graph_reader = read_graph6(name)
     node_count: np.ndarray = np.array([graph.numberOfNodes() for graph in graph_reader])
-    return {"number_of_nodes": int(np.median(node_count))}
+    graph_count = node_count.shape[0]
+    return {"number_of_nodes": int(np.median(node_count)), "graph_count": graph_count}
 
 
-def read_dataset_properties(name) -> Dict[str, Any]:
-
+def read_metadata() -> Dict[str, dict]:
     metadata_path = os.path.join(READ_PATH, METADATA_FILE)
     if os.path.exists(metadata_path):
         with open(metadata_path, "r") as f:
             metadata = json.load(f)
     else:
         metadata = {}
+    return metadata
+
+
+def read_dataset_properties(name) -> Dict[str, Any]:
+
+    metadata = read_metadata()
 
     if name in metadata:
         return metadata[name]
 
     metadata[name] = evaluate_matedata(name)
 
+    metadata_path = os.path.join(READ_PATH, METADATA_FILE)
     with open(metadata_path, "w") as f:
         json.dump(metadata, f, indent=4)
 
