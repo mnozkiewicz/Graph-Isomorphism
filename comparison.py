@@ -3,7 +3,8 @@ import json
 import os
 from tqdm.auto import tqdm
 from typing import Any, Callable, Dict, List, Tuple
-import time
+from joblib import Parallel, delayed
+import psutil
 
 import numpy as np
 import pandas as pd
@@ -14,7 +15,7 @@ from graph_utils.reading import read_graph6, read_dataset_properties
 
 SAVING_PATH = "processed_datasets"
 
-
+CPU_COUNT: int = psutil.cpu_count()
 ORDER = ["features", "dataset_name"]
 
 
@@ -112,13 +113,16 @@ def update_histogram_ranges(
     stored_ranges_dict,
     features_to_update,
     histogram_ranges,
-    features,
     dataset_name,
     **other_features,
-) -> List[Tuple[int, int]]:
+):
     for feature, ranges in zip(features_to_update, histogram_ranges):
         stored_ranges_dict[dataset_name][feature] = tuple(map(float, ranges))
 
+
+def read_histogram_ranges(
+    stored_ranges_dict, features, dataset_name, **other_features
+) -> List[Tuple[int, int]]:
     return [stored_ranges_dict[dataset_name][feature] for feature in features]
 
 
@@ -126,6 +130,23 @@ def _values_equal(a, b):
     if isinstance(a, (np.ndarray, list)) and isinstance(b, (np.ndarray, list)):
         return np.array_equal(a, b)
     return a == b
+
+
+def single_test(kwargs, histogram_ranges):
+    result = select_problematic_ids(**kwargs, embeddings=True, histogram_ranges=histogram_ranges)  # type: ignore
+    result = (
+        [item for sublist in result.values() for item in sublist]
+        if result
+        else np.array([-1])
+    )
+    return result
+
+
+def single_histogram_range_calc(kwargs, features_to_be_used) -> Tuple[int, int]:
+    kwargs2 = kwargs.copy()
+    kwargs2["features"] = features_to_be_used
+    histogram_ranges = find_optimal_histogram_ranges(**kwargs2, embeddings=False)
+    return histogram_ranges
 
 
 def _row_matches(row, criteria):
@@ -150,47 +171,88 @@ def tests(arguments_lists: List[Dict[str, Any]]):
     else:
         stored_histogram_ranges = {}
 
+    filtered_arguments: List[Dict[str, Any]] = []
+    for kwargs in arguments_lists:
+        kwargs["features"] = normalize_features(kwargs["features"])
+        # check if this set of parameters already was run
+        exists = outputs_df.apply(
+            lambda row: _row_matches(row, {key: kwargs[key] for key in ORDER}),
+            axis=1,
+        ).any()
+        if len(outputs_df) > 0 and exists:
+            continue
+        filtered_arguments.append(kwargs)
+
     try:
-        with tqdm(total=len(arguments_lists)) as progress_bar:
-            for kwargs in arguments_lists:
-                progress_bar.set_postfix(
-                    dataset=kwargs["dataset_name"], features=kwargs["features"]
-                )
-                kwargs["features"] = normalize_features(kwargs["features"])
-                # check if this set of parameters already was run
-                exists = outputs_df.apply(
-                    lambda row: _row_matches(row, {key: kwargs[key] for key in ORDER}),
-                    axis=1,
-                ).any()
-                if len(outputs_df) > 0 and exists:
-                    progress_bar.update(1)
-                    progress_bar.set_postfix(
-                        INFO="This args was already tested", **kwargs
-                    )
-                    time.sleep(0.1)
-                    continue
+        # calculating histogram ranges
+
+        with tqdm(total=len(filtered_arguments)) as progress_bar:
+            progress_bar.set_postfix(phase="histogram_ranges")
+            features_for_histogram_calc = []
+            for kwargs in filtered_arguments:
 
                 # reusing already calculated histogram ranges
                 features_to_be_used = reduce_number_of_features(
                     stored_histogram_ranges, **kwargs
                 )
                 if len(features_to_be_used) > 0:
-                    kwargs2 = kwargs.copy()
-                    kwargs2["features"] = features_to_be_used
-                    histogram_ranges = find_optimal_histogram_ranges(**kwargs2, embeddings=False)  # type: ignore
+                    features_for_histogram_calc.append((kwargs, features_to_be_used))
+                else:
+                    progress_bar.update(1)
+                    continue
 
-                    histogram_ranges = update_histogram_ranges(
+                if len(features_for_histogram_calc) == CPU_COUNT:
+                    histogram_ranges_batch = Parallel(n_jobs=CPU_COUNT)(
+                        delayed(single_histogram_range_calc)(
+                            kwargs, features_to_be_used
+                        )
+                        for kwargs, features_to_be_used in features_for_histogram_calc
+                    )
+                    for histogram_ranges, (kwargs, features_to_be_used) in zip(
+                        histogram_ranges_batch, features_for_histogram_calc
+                    ):
+                        update_histogram_ranges(
+                            stored_histogram_ranges,
+                            features_to_be_used,
+                            histogram_ranges,
+                            **kwargs,
+                        )
+                    progress_bar.update(CPU_COUNT)
+
+                    features_for_histogram_calc.clear()
+
+            if features_for_histogram_calc:
+                histogram_ranges_batch = Parallel(
+                    n_jobs=len(features_for_histogram_calc)
+                )(
+                    delayed(single_histogram_range_calc)(kwargs, features_to_be_used)
+                    for kwargs, features_to_be_used in features_for_histogram_calc
+                )
+                for histogram_ranges, (kwargs, features_to_be_used) in zip(
+                    histogram_ranges_batch, features_for_histogram_calc
+                ):
+                    update_histogram_ranges(
                         stored_histogram_ranges,
                         features_to_be_used,
                         histogram_ranges,
                         **kwargs,
                     )
+                progress_bar.update(len(features_for_histogram_calc))
 
-                result = select_problematic_ids(**kwargs, embeddings=True, histogram_ranges=histogram_ranges)  # type: ignore
-                result = (
-                    [item for sublist in result.values() for item in sublist]
-                    if result
-                    else np.array([-1])
+        # calculating colisions
+
+        with tqdm(total=len(filtered_arguments)) as progress_bar:
+            for i in range(0, len(filtered_arguments), CPU_COUNT):
+                kwargs_batch = filtered_arguments[i : i + CPU_COUNT]
+                histogram_ranges_batch = [
+                    read_histogram_ranges(stored_histogram_ranges, **kwargs)
+                    for kwargs in kwargs_batch
+                ]
+                results = Parallel(n_jobs=CPU_COUNT)(
+                    delayed(single_test)(kwargs, histogram_ranges)
+                    for kwargs, histogram_ranges in zip(
+                        kwargs_batch, histogram_ranges_batch
+                    )
                 )
 
                 outputs_df = pd.concat(
@@ -202,11 +264,12 @@ def tests(arguments_lists: List[Dict[str, Any]]):
                                     **{key: kwargs[key] for key in ORDER},
                                     result=result,
                                 )
+                                for result, kwargs in zip(results, kwargs_batch)
                             ]
                         ),
                     ]
                 )
-                progress_bar.update(1)
+                progress_bar.update(len(kwargs_batch))
 
     except KeyboardInterrupt:
         pass
