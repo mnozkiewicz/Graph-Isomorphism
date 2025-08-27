@@ -47,9 +47,7 @@ def select_problematic_ids(
 
     collisions: dict[str, list[int]] = {}
     hashes: dict[str, int] = {}
-    for graph_id, graph in tqdm(
-        enumerate(graph_reader), total=metadata["graph_count"], leave=False
-    ):
+    for graph_id, graph in enumerate(graph_reader):
 
         embedding = embedding_function(graph)
         h = xxhash.xxh128_hexdigest(embedding.tobytes())
@@ -75,12 +73,7 @@ def find_optimal_histogram_ranges(
         (min(histogram), max(histogram)) for histogram in function_values
     ]
     i = 0
-    for graph in tqdm(
-        graph_reader,
-        total=metadata["graph_count"] - 1,
-        leave=False,
-        postfix="histogram_ranges",
-    ):
+    for graph in graph_reader:
         i += 1
         function_values = embedding_function(graph)
         hist_ranges = [
