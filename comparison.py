@@ -4,8 +4,8 @@ import os
 from tqdm.auto import tqdm
 from typing import Any, Callable, Dict, List, Tuple
 from joblib import Parallel, delayed
+import networkit as nk
 import psutil
-
 import numpy as np
 import pandas as pd
 import xxhash
@@ -68,16 +68,23 @@ def find_optimal_histogram_ranges(
 ) -> List[Tuple[float, float]]:
     """function that goes through all descriptor values per graphs and finds minimum and maximum of each feature value"""
     first_graph = next(graph_reader)
-    function_values: np.ndarray = embedding_function(first_graph)
+    function_values: List[np.ndarray] = embedding_function(first_graph)
+    function_values = [arr[~np.isnan(arr)] for arr in function_values]
     hist_ranges: List[Tuple[float, float]] = [
-        (min(histogram), max(histogram)) for histogram in function_values
+        (np.min(arr), np.max(arr)) if len(arr) else (np.inf, -np.inf)
+        for arr in function_values
     ]
     i = 0
     for graph in graph_reader:
         i += 1
         function_values = embedding_function(graph)
+        function_values = [arr[~np.isnan(arr)] for arr in function_values]
         hist_ranges = [
-            (min(ranges[0], min(values)), max(ranges[1], max(values)))
+            (
+                (min(ranges[0], np.min(values)), max(ranges[1], np.max(values)))
+                if len(values)
+                else ranges
+            )
             for ranges, values in zip(hist_ranges, function_values)
         ]
     # in situation that range is too small and there is no way to fit all bins into
@@ -126,6 +133,8 @@ def _values_equal(a, b):
 
 
 def single_test(kwargs, histogram_ranges):
+    nk.setNumberOfThreads(1)
+
     result = select_problematic_ids(**kwargs, embeddings=True, histogram_ranges=histogram_ranges)  # type: ignore
     result = (
         [item for sublist in result.values() for item in sublist]
@@ -136,6 +145,8 @@ def single_test(kwargs, histogram_ranges):
 
 
 def single_histogram_range_calc(kwargs, features_to_be_used) -> Tuple[int, int]:
+    nk.setNumberOfThreads(1)
+
     kwargs2 = kwargs.copy()
     kwargs2["features"] = features_to_be_used
     histogram_ranges = find_optimal_histogram_ranges(**kwargs2, embeddings=False)
