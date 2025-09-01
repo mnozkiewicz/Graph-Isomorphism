@@ -89,8 +89,16 @@ def find_optimal_histogram_ranges(
         ]
     # in situation that range is too small and there is no way to fit all bins into
     for i, range in enumerate(hist_ranges):
-        if range[1] - range[0] < 2e-4:
-            hist_ranges[i] = (range[0], range[0] + 2e-4)
+        right, left = range[1], range[0]
+        step = 1e-4
+        limit = 2 * metadata["number_of_nodes"] ** 2
+        while True:
+            a = np.linspace(left, right, limit, dtype=np.float32)
+            if len(np.unique(a)) == len(a):
+                break
+            right += step
+
+        hist_ranges[i] = (left, right)
     return hist_ranges
 
 
@@ -162,7 +170,7 @@ def tests(arguments_lists: List[Dict[str, Any]]):
     # reading outputs file, having parameters values and list of all
     output_path = os.path.join(SAVING_PATH, "table.parquet")
     if os.path.exists(output_path):
-        outputs_df = pd.read_parquet(output_path)
+        outputs_df = pd.read_parquet(output_path, engine="fastparquet")
     else:
         outputs_df = pd.DataFrame(columns=ORDER + ["result"])
 
@@ -266,7 +274,7 @@ def tests(arguments_lists: List[Dict[str, Any]]):
                             [
                                 dict(
                                     **{key: kwargs[key] for key in ORDER},
-                                    result=result,
+                                    result=[int(n) for n in result],
                                 )
                                 for result, kwargs in zip(results, kwargs_batch)
                             ]
@@ -279,6 +287,6 @@ def tests(arguments_lists: List[Dict[str, Any]]):
         pass
 
     finally:
-        outputs_df.to_parquet(output_path)
+        outputs_df.to_parquet(output_path, engine="fastparquet")
         with open(histograms_path, "w") as f:
             json.dump(stored_histogram_ranges, f, indent=4)
